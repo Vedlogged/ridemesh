@@ -6,10 +6,12 @@ import {
   buildTransaction, 
   pollTransaction, 
   CONTRACT_ID, 
+  REPUTATION_CONTRACT_ID,
   FARE_TOKEN_ID, 
   NETWORK_PASSPHRASE,
   toStroops,
-  fromStroops
+  fromStroops,
+  simulateCall
 } from "@/lib/stellar";
 import { nativeToScVal, scValToNative, xdr, Address, TransactionBuilder } from "@stellar/stellar-sdk";
 
@@ -57,10 +59,11 @@ interface StellarState {
   drivers: Record<string, DriverProfile>;
   events: BlockchainEvent[];
   
-  // TX state
+  // Loading & TX States
   txStatus: "idle" | "pending" | "success" | "failed";
   txHash: string | null;
   errorMessage: string | null;
+  loadingStates: Record<string, boolean>; // Granular loader indicators (e.g. { 'request': true, 'accept-101': true })
 
   // Actions
   connectWallet: (sandbox?: boolean) => Promise<void>;
@@ -73,7 +76,9 @@ interface StellarState {
   rateDriver: (rideId: number, rating: number) => Promise<void>;
   clearError: () => void;
   pollBlockchainEvents: () => Promise<void>;
+  loadDriverProfiles: () => Promise<void>;
   addEvent: (event: Omit<BlockchainEvent, "id">) => void;
+  setLoading: (key: string, val: boolean) => void;
 }
 
 // Lazy dynamic importer for StellarWalletsKit to avoid SSR compilation errors
@@ -90,7 +95,6 @@ async function getWalletKit() {
     const { FreighterModule } = await import("@creit.tech/stellar-wallets-kit/modules/freighter");
     const { AlbedoModule } = await import("@creit.tech/stellar-wallets-kit/modules/albedo");
     const { xBullModule } = await import("@creit.tech/stellar-wallets-kit/modules/xbull");
-    const { Networks } = await import("@creit.tech/stellar-wallets-kit/types");
 
     StellarWalletsKit.init({
       modules: [
@@ -201,8 +205,16 @@ export const useStellar = create<StellarState>((set, get) => ({
   txStatus: "idle",
   txHash: null,
   errorMessage: null,
+  loadingStates: {},
 
   clearError: () => set({ errorMessage: null }),
+
+  setLoading: (key, val) => set((state) => ({
+    loadingStates: {
+      ...state.loadingStates,
+      [key]: val
+    }
+  })),
 
   addEvent: (event) => set((state) => ({
     events: [
@@ -245,7 +257,7 @@ export const useStellar = create<StellarState>((set, get) => ({
       const { address } = await Kit.authModal();
       
       if (!address) {
-        throw new Error("Unable to retrieve public key from wallet");
+        throw new Error("Unable to retrieve public key from wallet. User might have cancelled.");
       }
 
       set({
@@ -266,6 +278,9 @@ export const useStellar = create<StellarState>((set, get) => ({
         details: "Connected via Stellar Wallet",
         hash: `conn_${Date.now()}`
       });
+
+      // Trigger initial contract syncing
+      await get().pollBlockchainEvents();
 
     } catch (error: any) {
       console.error("Failed to connect wallet:", error);
@@ -292,7 +307,9 @@ export const useStellar = create<StellarState>((set, get) => ({
       tokenBalance: "0.0",
       isSandbox: true, // Revert to sandbox
       txStatus: "idle",
-      txHash: null
+      txHash: null,
+      errorMessage: null,
+      loadingStates: {}
     });
     
     get().addEvent({
@@ -328,6 +345,7 @@ export const useStellar = create<StellarState>((set, get) => ({
       return;
     }
 
+    get().setLoading("request", true);
     set({ txStatus: "pending", txHash: null, errorMessage: null });
 
     const txSimHash = Math.random().toString(16).substring(2, 34);
@@ -341,6 +359,7 @@ export const useStellar = create<StellarState>((set, get) => ({
             txStatus: "failed", 
             errorMessage: "Insufficient balance: You do not have enough RIDE tokens for this fare escrow" 
           });
+          get().setLoading("request", false);
           return;
         }
 
@@ -370,6 +389,7 @@ export const useStellar = create<StellarState>((set, get) => ({
           details: `Requested a new RideMesh ride. Escrowed ${fare} RIDE tokens.`,
           hash: `sim_${txSimHash}`
         });
+        get().setLoading("request", false);
       }, 1500);
       return;
     }
@@ -407,7 +427,7 @@ export const useStellar = create<StellarState>((set, get) => ({
       set({ txHash: submission.hash });
 
       // 4. Poll transaction status
-      const result = await pollTransaction(submission.hash);
+      await pollTransaction(submission.hash);
       
       // 5. Update state on success
       set({ txStatus: "success" });
@@ -420,6 +440,8 @@ export const useStellar = create<StellarState>((set, get) => ({
         txStatus: "failed", 
         errorMessage: error.message || "Smart contract transaction rejected or failed" 
       });
+    } finally {
+      get().setLoading("request", false);
     }
   },
 
@@ -430,6 +452,8 @@ export const useStellar = create<StellarState>((set, get) => ({
       return;
     }
 
+    const loaderKey = `accept-${rideId}`;
+    get().setLoading(loaderKey, true);
     set({ txStatus: "pending", txHash: null, errorMessage: null });
 
     const txSimHash = Math.random().toString(16).substring(2, 34);
@@ -455,6 +479,7 @@ export const useStellar = create<StellarState>((set, get) => ({
           details: `Accepted Ride #${rideId} as Driver. Heading to passenger.`,
           hash: `sim_${txSimHash}`
         });
+        get().setLoading(loaderKey, false);
       }, 1200);
       return;
     }
@@ -486,10 +511,13 @@ export const useStellar = create<StellarState>((set, get) => ({
       set({ txStatus: "success" });
       await get().pollBlockchainEvents();
     } catch (error: any) {
+      console.error("Accept ride failed:", error);
       set({ 
         txStatus: "failed", 
         errorMessage: error.message || "Accept ride transaction failed" 
       });
+    } finally {
+      get().setLoading(loaderKey, false);
     }
   },
 
@@ -500,6 +528,8 @@ export const useStellar = create<StellarState>((set, get) => ({
       return;
     }
 
+    const loaderKey = `complete-${rideId}`;
+    get().setLoading(loaderKey, true);
     set({ txStatus: "pending", txHash: null, errorMessage: null });
 
     const txSimHash = Math.random().toString(16).substring(2, 34);
@@ -510,6 +540,7 @@ export const useStellar = create<StellarState>((set, get) => ({
         const targetRide = get().rides.find(r => r.id === rideId);
         if (!targetRide) {
           set({ txStatus: "failed", errorMessage: "Ride not found" });
+          get().setLoading(loaderKey, false);
           return;
         }
 
@@ -529,6 +560,7 @@ export const useStellar = create<StellarState>((set, get) => ({
           details: `Confirmed ride #${rideId} completed. Escrow of ${targetRide.fare} released.`,
           hash: `sim_${txSimHash}`
         });
+        get().setLoading(loaderKey, false);
       }, 1200);
       return;
     }
@@ -561,10 +593,13 @@ export const useStellar = create<StellarState>((set, get) => ({
       await get().loadBalances();
       await get().pollBlockchainEvents();
     } catch (error: any) {
+      console.error("Complete ride failed:", error);
       set({ 
         txStatus: "failed", 
         errorMessage: error.message || "Complete ride transaction failed" 
       });
+    } finally {
+      get().setLoading(loaderKey, false);
     }
   },
 
@@ -575,6 +610,8 @@ export const useStellar = create<StellarState>((set, get) => ({
       return;
     }
 
+    const loaderKey = `cancel-${rideId}`;
+    get().setLoading(loaderKey, true);
     set({ txStatus: "pending", txHash: null, errorMessage: null });
 
     const txSimHash = Math.random().toString(16).substring(2, 34);
@@ -585,6 +622,7 @@ export const useStellar = create<StellarState>((set, get) => ({
         const targetRide = get().rides.find(r => r.id === rideId);
         if (!targetRide) {
           set({ txStatus: "failed", errorMessage: "Ride not found" });
+          get().setLoading(loaderKey, false);
           return;
         }
 
@@ -608,6 +646,7 @@ export const useStellar = create<StellarState>((set, get) => ({
           details: `Cancelled Ride #${rideId}. Escrow of ${refund} RIDE refunded.`,
           hash: `sim_${txSimHash}`
         });
+        get().setLoading(loaderKey, false);
       }, 1200);
       return;
     }
@@ -641,10 +680,13 @@ export const useStellar = create<StellarState>((set, get) => ({
       await get().loadBalances();
       await get().pollBlockchainEvents();
     } catch (error: any) {
+      console.error("Cancel ride failed:", error);
       set({ 
         txStatus: "failed", 
         errorMessage: error.message || "Cancellation failed" 
       });
+    } finally {
+      get().setLoading(loaderKey, false);
     }
   },
 
@@ -655,6 +697,8 @@ export const useStellar = create<StellarState>((set, get) => ({
       return;
     }
 
+    const loaderKey = `rate-${rideId}`;
+    get().setLoading(loaderKey, true);
     set({ txStatus: "pending", txHash: null, errorMessage: null });
 
     const txSimHash = Math.random().toString(16).substring(2, 34);
@@ -665,6 +709,7 @@ export const useStellar = create<StellarState>((set, get) => ({
         const targetRide = get().rides.find(r => r.id === rideId);
         if (!targetRide) {
           set({ txStatus: "failed", errorMessage: "Ride not found" });
+          get().setLoading(loaderKey, false);
           return;
         }
 
@@ -703,6 +748,7 @@ export const useStellar = create<StellarState>((set, get) => ({
           details: `Rated Driver ${rating} stars for Ride #${rideId}`,
           hash: `sim_${txSimHash}`
         });
+        get().setLoading(loaderKey, false);
       }, 1000);
       return;
     }
@@ -734,10 +780,62 @@ export const useStellar = create<StellarState>((set, get) => ({
       set({ txStatus: "success" });
       await get().pollBlockchainEvents();
     } catch (error: any) {
+      console.error("Rate driver failed:", error);
       set({ 
         txStatus: "failed", 
         errorMessage: error.message || "Submit rating transaction failed" 
       });
+    } finally {
+      get().setLoading(loaderKey, false);
+    }
+  },
+
+  loadDriverProfiles: async () => {
+    const { rides, isSandbox } = get();
+    if (isSandbox) return;
+
+    // Collect all unique driver addresses (excluding placeholders / passengers)
+    const uniqueDrivers = Array.from(
+      new Set(
+        rides
+          .filter(r => r.status !== 0 && r.driver && r.driver !== r.passenger)
+          .map(r => r.driver)
+      )
+    );
+
+    const updatedDrivers: Record<string, DriverProfile> = {};
+
+    for (const driverAddress of uniqueDrivers) {
+      try {
+        // Query Reputation Contract data directly using the mock simulate call
+        const result = await simulateCall(
+          CONTRACT_ID, // Call RideMesh, which delegates call to Reputation
+          "get_driver",
+          [nativeToScVal(Address.fromString(driverAddress))]
+        );
+        if (result) {
+          const native = scValToNative(result);
+          if (native) {
+            updatedDrivers[driverAddress] = {
+              address: driverAddress,
+              reputationScore: Number(native.reputation_score),
+              totalRides: Number(native.total_rides),
+              ratingSum: Number(native.rating_sum)
+            };
+          }
+        }
+      } catch (e) {
+        console.warn(`Failed to fetch on-chain profile for driver ${driverAddress}:`, e);
+      }
+    }
+
+    if (Object.keys(updatedDrivers).length > 0) {
+      set((state) => ({
+        drivers: {
+          ...state.drivers,
+          ...updatedDrivers
+        }
+      }));
     }
   },
 
@@ -746,10 +844,8 @@ export const useStellar = create<StellarState>((set, get) => ({
     if (isSandbox) return; // Simulated sandbox environment handles its own local events
 
     try {
-      // In a production environment, we call getEvents from the RPC server
-      // to retrieve contract events for RideMesh
       const latestLedgerResp = await rpcServer.getLatestLedger();
-      const startLedger = latestLedgerResp.sequence - 100; // Look back ~100 ledgers (approx 5-10 minutes)
+      const startLedger = latestLedgerResp.sequence - 100; // Look back ~100 ledgers
       
       const eventResponse = await rpcServer.getEvents({
         startLedger,
@@ -759,13 +855,15 @@ export const useStellar = create<StellarState>((set, get) => ({
             contractIds: [CONTRACT_ID]
           }
         ],
-        limit: 10
+        limit: 15
       });
 
       if (eventResponse.events && eventResponse.events.length > 0) {
+        const updatedRidesMap = new Map<number, Partial<Ride>>();
+        const newRideIdsToFetch: number[] = [];
+
         const formattedEvents = eventResponse.events.map((evt: any) => {
           const topics = evt.topic;
-          // Decode first topic as event symbol
           const eventSymbol = scValToNative(topics[0]) as string;
           const address = scValToNative(topics[1]) as string;
           const rideId = topics[2] ? (scValToNative(topics[2]) as number) : 0;
@@ -774,40 +872,92 @@ export const useStellar = create<StellarState>((set, get) => ({
           let type: BlockchainEvent["type"] = "requested";
           let details = "";
 
-          switch (eventSymbol) {
-            case "ride_req":
+          if (rideId > 0) {
+            if (eventSymbol === "ride_req") {
               type = "requested";
-              details = `Passenger requested ride #${rideId} for ${fromStroops(value).toFixed(2)} tokens`;
-              break;
-            case "ride_acc":
+              details = `Passenger requested ride #${rideId} for ${fromStroops(value).toFixed(2)} RIDE`;
+              newRideIdsToFetch.push(rideId);
+            } else if (eventSymbol === "ride_acc") {
               type = "accepted";
-              details = `Driver accepted ride #${rideId} with fare ${fromStroops(value).toFixed(2)} tokens`;
-              break;
-            case "ride_comp":
+              details = `Driver ${address.substring(0, 6)}... accepted ride #${rideId}`;
+              updatedRidesMap.set(rideId, { status: 1, driver: address });
+            } else if (eventSymbol === "ride_comp") {
               type = "completed";
-              details = `Ride #${rideId} completed successfully. Escrow funds released.`;
-              break;
-            case "ride_canc":
+              details = `Confirmed ride #${rideId} completed. Escrow released.`;
+              updatedRidesMap.set(rideId, { status: 2 });
+            } else if (eventSymbol === "ride_canc") {
               type = "cancelled";
               details = `Ride #${rideId} was cancelled. Escrow refunded.`;
-              break;
-            case "driver_rt":
+              updatedRidesMap.set(rideId, { status: 3 });
+            } else if (eventSymbol === "driver_rt") {
               type = "rated";
-              details = `Driver was rated ${value} stars for ride #${rideId}`;
-              break;
+              details = `Driver rated ${value} stars for ride #${rideId}`;
+              updatedRidesMap.set(rideId, { rating: Number(value) });
+            }
           }
 
           return {
             id: evt.id,
             type,
-            timestamp: Date.now(), // Ledger timestamp is preferred if available
+            timestamp: Date.now(),
             walletAddress: address,
             details,
             hash: evt.txHash
           } as BlockchainEvent;
         });
 
-        // Merge and de-duplicate by ID
+        // 1. Fetch newly discovered ride IDs that we don't have in local state
+        const currentRides = get().rides;
+        const currentRideIds = new Set(currentRides.map(r => r.id));
+
+        for (const rId of newRideIdsToFetch) {
+          if (!currentRideIds.has(rId)) {
+            try {
+              const result = await simulateCall(
+                CONTRACT_ID,
+                "get_ride",
+                [nativeToScVal(rId, { type: "u32" })]
+              );
+              if (result) {
+                const rideData = scValToNative(result);
+                if (rideData) {
+                  const rideObj: Ride = {
+                    id: Number(rideData.id),
+                    passenger: rideData.passenger,
+                    driver: rideData.driver,
+                    fare: fromStroops(rideData.fare),
+                    status: Number(rideData.status),
+                    rating: Number(rideData.rating),
+                    timestamp: Number(rideData.timestamp) * 1000 // Convert sec to ms
+                  };
+                  set((state) => ({
+                    rides: [rideObj, ...state.rides]
+                  }));
+                }
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch new ride #${rId}:`, err);
+            }
+          }
+        }
+
+        // 2. Apply status & rating updates to existing rides
+        if (updatedRidesMap.size > 0) {
+          set((state) => ({
+            rides: state.rides.map(r => {
+              const update = updatedRidesMap.get(r.id);
+              if (update) {
+                return { ...r, ...update };
+              }
+              return r;
+            })
+          }));
+        }
+
+        // 3. Update driver profiles dynamically based on rated events
+        await get().loadDriverProfiles();
+
+        // 4. Merge and de-duplicate event log feed
         set((state) => {
           const merged = [...formattedEvents, ...state.events];
           const unique = merged.filter((item, index, self) =>
