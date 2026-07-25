@@ -10,7 +10,8 @@ const {
   Operation, 
   xdr, 
   Address,
-  StrKey
+  nativeToScVal,
+  Contract
 } = require("@stellar/stellar-sdk");
 
 // Stellar Testnet Configuration
@@ -18,19 +19,19 @@ const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "https://soroban-testnet.stel
 const server = new rpc.Server(RPC_URL);
 const PASSPHRASE = Networks.TESTNET;
 
-// Path to compiled smart contract WASM
-const WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/ridemesh_contract.wasm");
+// Paths to compiled smart contract WASM binaries
+const REPUTATION_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/reputation_contract.wasm");
+const RIDEMESH_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/ridemesh_contract.wasm");
 
 async function deploy() {
-  console.log("--------------------------------------------------");
-  console.log(" RideMesh Smart Contract Deployment (Testnet)");
-  console.log("--------------------------------------------------");
+  console.log("----------------------------------------------------------------");
+  console.log(" RideMesh Advanced Smart Contracts Deployment (Stellar Testnet)");
+  console.log("----------------------------------------------------------------");
 
-  // Ensure deployment secret key is configured
   const deployerSecret = process.env.DEPLOYER_SECRET_KEY;
   if (!deployerSecret) {
     console.error("Error: DEPLOYER_SECRET_KEY environment variable is not set.");
-    console.error("Please add it to your .env file.");
+    console.error("Please add it to your .env.local file.");
     process.exit(1);
   }
 
@@ -38,30 +39,59 @@ async function deploy() {
   const deployerAddress = deployerKeypair.publicKey();
   console.log(`Deployer Address: ${deployerAddress}`);
 
-  // 1. Verify WASM binary exists
-  if (!fs.existsSync(WASM_PATH)) {
-    console.error(`Error: WASM file not found at ${WASM_PATH}`);
-    console.error("Please run the compilation command first:");
-    console.error("  cd contracts && stellar contract build");
-    process.exit(1);
-  }
-
-  const wasmBytes = fs.readFileSync(WASM_PATH);
-  console.log(`WASM Size: ${(wasmBytes.length / 1024).toFixed(2)} KB`);
-
-  // Load deployer account sequence
+  // Check account existence
   console.log("Loading deployer account info...");
-  let account;
   try {
-    account = await server.getAccount(deployerAddress);
+    await server.getAccount(deployerAddress);
   } catch (error) {
     console.error("Error: Failed to load account. Is it funded on Testnet?");
     console.error(`Fund it here: https://friendbot.stellar.org/?addr=${deployerAddress}`);
     process.exit(1);
   }
 
-  // 2. Upload / Install WASM bytecode
-  console.log("1. Installing WASM bytecode on-chain...");
+  // 1. Install & Deploy Reputation Contract
+  console.log("\n>>> Step 1: Uploading & Deploying Reputation Contract...");
+  const reputationWasmHash = await installWasm(REPUTATION_WASM_PATH, deployerKeypair, deployerAddress);
+  // Using saltOffset = 1 for reputation
+  const reputationContractId = await instantiateContract(reputationWasmHash, deployerKeypair, deployerAddress, 1);
+
+  // 2. Install & Deploy RideMesh Contract
+  console.log("\n>>> Step 2: Uploading & Deploying RideMesh Contract...");
+  const ridemeshWasmHash = await installWasm(RIDEMESH_WASM_PATH, deployerKeypair, deployerAddress);
+  // Using saltOffset = 2 for ridemesh
+  const ridemeshContractId = await instantiateContract(ridemeshWasmHash, deployerKeypair, deployerAddress, 2);
+
+  // 3. Cross-linking contracts on-chain
+  console.log("\n>>> Step 3: Cross-Linking Reputation & RideMesh Contracts...");
+  
+  // Call init(ridemeshContractId) on reputation contract
+  await callContractInit(reputationContractId, ridemeshContractId, deployerKeypair, deployerAddress);
+
+  // Call init(reputationContractId) on ridemesh contract
+  await callContractInit(ridemeshContractId, reputationContractId, deployerKeypair, deployerAddress);
+
+  // 4. Save deployed IDs to env config
+  updateEnvFile(ridemeshContractId, reputationContractId);
+
+  console.log("\n----------------------------------------------------------------");
+  console.log("✓ All deployments and cross-linking initialization complete!");
+  console.log(`- RideMesh Contract ID: ${ridemeshContractId}`);
+  console.log(`- Reputation Contract ID: ${reputationContractId}`);
+  console.log("----------------------------------------------------------------");
+}
+
+async function installWasm(wasmPath, deployerKeypair, deployerAddress) {
+  if (!fs.existsSync(wasmPath)) {
+    console.error(`Error: WASM file not found at ${wasmPath}`);
+    console.error("Please run the compilation command first:");
+    console.error("  cd contracts && cargo build --target wasm32-unknown-unknown --release");
+    process.exit(1);
+  }
+
+  const wasmBytes = fs.readFileSync(wasmPath);
+  console.log(`Installing WASM: ${path.basename(wasmPath)} (${(wasmBytes.length / 1024).toFixed(2)} KB)...`);
+
+  let account = await server.getAccount(deployerAddress);
   const installOp = Operation.invokeHostFunction({
     func: xdr.HostFunction.hostFunctionTypeUploadContractWasm(wasmBytes),
     auth: []
@@ -75,52 +105,45 @@ async function deploy() {
     .setTimeout(60)
     .build();
 
-  // Simulate to calculate fees and footprint
   let sim = await server.simulateTransaction(tx);
   if (sim.error) {
-    console.error("Installation Simulation failed:", sim.error);
-    process.exit(1);
+    throw new Error(`WASM Installation Simulation failed: ${JSON.stringify(sim.error)}`);
   }
 
   tx = rpc.assembleTransaction(tx, sim).build();
   tx.sign(deployerKeypair);
 
-  console.log("Submitting Installation Transaction...");
   let sendResp = await server.sendTransaction(tx);
   if (sendResp.status === "ERROR") {
-    console.error("Submission failed:", sendResp.errorResult);
-    process.exit(1);
+    throw new Error(`Submission failed: ${JSON.stringify(sendResp.errorResult)}`);
   }
 
-  console.log(`Submitted. Hash: ${sendResp.hash}`);
-  console.log("Waiting for confirmation...");
+  console.log(`Submitted install tx. Hash: ${sendResp.hash}. Waiting for confirmation...`);
   let txResult = await pollTx(sendResp.hash);
-  
-  // Extract WASM Hash from events/result
   const wasmHash = txResult.resultMetaXdr
     .v3()
     .sorobanMeta()
     .returnValue()
     .bytes();
   
-  const wasmHashHex = wasmHash.toString("hex");
-  console.log(`✓ WASM installed successfully. WASM Hash: ${wasmHashHex}`);
+  return wasmHash.toString("hex");
+}
 
-  // Reload account sequence
-  account = await server.getAccount(deployerAddress);
+async function instantiateContract(wasmHashHex, deployerKeypair, deployerAddress, saltOffset) {
+  console.log(`Instantiating contract with salt offset ${saltOffset}...`);
+  let account = await server.getAccount(deployerAddress);
 
-  // 3. Create / Instantiate Contract Instance
-  console.log("\n2. Instantiating Contract Instance...");
-  
-  const constructorArgs = []; // Our contract does not have an init constructor
-  
+  // Determinisitc 32-byte salt using the offset
+  const salt = Buffer.alloc(32);
+  salt.writeUInt32BE(saltOffset, 28);
+
   const createOp = Operation.invokeHostFunction({
     func: xdr.HostFunction.hostFunctionTypeCreateContract(
       new xdr.CreateContractArgs({
         contractIdPreimage: xdr.ContractIdPreimage.contractIdPreimageFromAddress(
           new xdr.ContractIdPreimageFromAddress({
             address: Address.fromString(deployerAddress).toScAddress(),
-            salt: Buffer.alloc(32) // Use a 32-byte zero salt or random salt
+            salt: salt
           })
         ),
         executable: xdr.ContractExecutable.contractExecutableWasm(
@@ -131,7 +154,7 @@ async function deploy() {
     auth: []
   });
 
-  let instantiateTx = new TransactionBuilder(account, {
+  let tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: PASSPHRASE,
   })
@@ -139,39 +162,63 @@ async function deploy() {
     .setTimeout(60)
     .build();
 
-  sim = await server.simulateTransaction(instantiateTx);
+  let sim = await server.simulateTransaction(tx);
   if (sim.error) {
-    console.error("Instantiation Simulation failed:", sim.error);
-    process.exit(1);
+    throw new Error(`Instantiation Simulation failed: ${JSON.stringify(sim.error)}`);
   }
 
-  instantiateTx = rpc.assembleTransaction(instantiateTx, sim).build();
-  instantiateTx.sign(deployerKeypair);
+  tx = rpc.assembleTransaction(tx, sim).build();
+  tx.sign(deployerKeypair);
 
-  console.log("Submitting Instantiation Transaction...");
-  sendResp = await server.sendTransaction(instantiateTx);
+  let sendResp = await server.sendTransaction(tx);
   if (sendResp.status === "ERROR") {
-    console.error("Submission failed:", sendResp.errorResult);
-    process.exit(1);
+    throw new Error(`Submission failed: ${JSON.stringify(sendResp.errorResult)}`);
   }
 
-  console.log(`Submitted. Hash: ${sendResp.hash}`);
-  console.log("Waiting for confirmation...");
-  txResult = await pollTx(sendResp.hash);
-
-  // Extract Contract ID
+  console.log(`Submitted instantiate tx. Hash: ${sendResp.hash}. Waiting for confirmation...`);
+  let txResult = await pollTx(sendResp.hash);
   const contractAddressVal = txResult.resultMetaXdr
     .v3()
     .sorobanMeta()
     .returnValue();
 
-  // Convert ScVal Address to string
-  const contractId = Address.fromScVal(contractAddressVal).toString();
-  console.log(`\n✓ Contract deployed successfully!`);
-  console.log(`Contract ID: ${contractId}`);
+  return Address.fromScVal(contractAddressVal).toString();
+}
 
-  // 4. Store deployed Contract ID in env file
-  updateEnvFile(contractId);
+async function callContractInit(contractId, initAddressArg, deployerKeypair, deployerAddress) {
+  console.log(`Calling init() on contract ${contractId} with address ${initAddressArg}...`);
+  let account = await server.getAccount(deployerAddress);
+  const contract = new Contract(contractId);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        "init", 
+        nativeToScVal(Address.fromString(initAddressArg))
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  let sim = await server.simulateTransaction(tx);
+  if (sim.error) {
+    throw new Error(`Call to init() simulation failed: ${JSON.stringify(sim.error)}`);
+  }
+
+  tx = rpc.assembleTransaction(tx, sim).build();
+  tx.sign(deployerKeypair);
+
+  let sendResp = await server.sendTransaction(tx);
+  if (sendResp.status === "ERROR") {
+    throw new Error(`Submission failed: ${JSON.stringify(sendResp.errorResult)}`);
+  }
+
+  console.log(`Submitted init call. Hash: ${sendResp.hash}. Waiting for confirmation...`);
+  await pollTx(sendResp.hash);
+  console.log(`✓ Successfully initialized contract ${contractId}`);
 }
 
 async function pollTx(hash) {
@@ -188,14 +235,14 @@ async function pollTx(hash) {
   throw new Error("Polling timed out");
 }
 
-function updateEnvFile(contractId) {
-  const envPath = path.join(__dirname, "../.env");
+function updateEnvFile(ridemeshContractId, reputationContractId) {
   const envLocalPath = path.join(__dirname, "../.env.local");
   
   const content = `NEXT_PUBLIC_STELLAR_NETWORK="testnet"
 NEXT_PUBLIC_RPC_URL="https://soroban-testnet.stellar.org"
 NEXT_PUBLIC_HORIZON_URL="https://horizon-testnet.stellar.org"
-NEXT_PUBLIC_CONTRACT_ID="${contractId}"
+NEXT_PUBLIC_CONTRACT_ID="${ridemeshContractId}"
+NEXT_PUBLIC_REPUTATION_CONTRACT_ID="${reputationContractId}"
 NEXT_PUBLIC_FARE_TOKEN_ID="CDLZFC3SYJYDZT7K67VZ75HPJSIZMAFRHGVKNECE6ALBHGLMTZW4NNKQ"
 `;
 
