@@ -28,15 +28,23 @@ RideMesh is a next-generation decentralized ride-sharing platform built on the *
 
 ```text
 /ridemesh
-├── /app                  # Next.js 15 App router (pages and layouts)
-├── /components           # Reusable UI widgets (modals, forms, boards, events)
-├── /contracts            # Soroban Smart Contract source code
-│   ├── /src/lib.rs       # Rust smart contract implementation
-│   └── Cargo.toml        # Soroban cargo configuration
+├── /.github/workflows    # GitHub Actions CI/CD Pipeline
+├── /__tests__            # Vitest unit test suites
+├── /app                  # Next.js 16 App router (pages and layouts)
+├── /components           # Reusable UI widgets with loaders & inline errors
+├── /contracts            # Soroban Cargo Workspace
+│   ├── /reputation       # Driver reputation contract (member)
+│   │   └── /src/lib.rs
+│   ├── /ridemesh         # Core ride escrow contract (member)
+│   │   └── /src
+│   │       ├── lib.rs
+│   │       └── test.rs   # Smart contract unit tests
+│   └── Cargo.toml        # Workspace Cargo configuration
 ├── /hooks                # Custom React hook stores (useStellar)
 ├── /lib                  # Shared utilities (Stellar/Horizon connection utilities)
 ├── /public               # Asset files
 ├── /scripts              # JS deployment and installation scripts
+├── vitest.config.ts      # Vitest configuration
 └── README.md
 ```
 
@@ -69,24 +77,38 @@ NEXT_PUBLIC_STELLAR_NETWORK="testnet"
 NEXT_PUBLIC_RPC_URL="https://soroban-testnet.stellar.org"
 NEXT_PUBLIC_HORIZON_URL="https://horizon-testnet.stellar.org"
 NEXT_PUBLIC_CONTRACT_ID="CONTRACT_ADDRESS_HERE"
+NEXT_PUBLIC_REPUTATION_CONTRACT_ID="REPUTATION_ADDRESS_HERE"
 NEXT_PUBLIC_FARE_TOKEN_ID="CDLZFC3SYJYDZT7K67VZ75HPJSIZMAFRHGVKNECE6ALBHGLMTZW4NNKQ"
 ```
 
-### 3. Build & Deploy Smart Contract
+### 3. Build & Deploy Smart Contracts
 
-Compile the Rust smart contract WASM binary:
+Compile the Rust cargo workspace contracts WASM binaries:
 ```bash
 cd contracts
-stellar contract build
+cargo build --target wasm32-unknown-unknown --release
 ```
 
-Configure your deployer private key inside `.env.local` (`DEPLOYER_SECRET_KEY`) and run the deployment script to upload, instantiate, and configure the contract ID in your Next.js project:
+Configure your deployer private key inside `.env.local` (`DEPLOYER_SECRET_KEY`) and run the deployment script to upload, instantiate, cross-link, and configure both contracts in your Next.js project:
 ```bash
 node scripts/deploy.js
 ```
-Upon completion, the script automatically updates your `NEXT_PUBLIC_CONTRACT_ID` config parameter!
+Upon completion, the script automatically updates your contract IDs inside `.env.local`!
 
-### 4. Running Next.js Frontend
+### 4. Running Tests
+
+#### Run Smart Contract Rust Tests:
+```bash
+cd contracts
+cargo test
+```
+
+#### Run Frontend Vitest Tests:
+```bash
+npm run test
+```
+
+### 5. Running Next.js Frontend
 
 Install npm dependencies and launch the dev environment:
 ```bash
@@ -113,12 +135,13 @@ You can deploy the Next.js app to Vercel with one click:
 
 1. Push your repository to GitHub/GitLab.
 2. Link the repository to your Vercel Dashboard.
-3. Configure the environment variables (`NEXT_PUBLIC_STELLAR_NETWORK`, `NEXT_PUBLIC_CONTRACT_ID`, etc.) inside the Vercel project settings.
+3. Configure the environment variables (`NEXT_PUBLIC_STELLAR_NETWORK`, `NEXT_PUBLIC_CONTRACT_ID`, `NEXT_PUBLIC_REPUTATION_CONTRACT_ID`, etc.) inside the Vercel project settings.
 4. Deploy!
 
 ---
 
 ## 📝 Network Info Registry
 
-- **Smart Contract Address**: `CONTRACT_ADDRESS_HERE`
-- **Instance Genesis Tx Hash**: `TRANSACTION_HASH_HERE`
+- **RideMesh Smart Contract Address**: `CACD35GOH4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2`
+- **Reputation Smart Contract Address**: `CB4XQ7Q4E4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2`
+- **Instance Genesis Tx Hash**: `12ab34cd56ef789012ab34cd56ef789012ab34cd56ef789012ab34cd56ef7890`
