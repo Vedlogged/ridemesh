@@ -1,0 +1,76 @@
+name: RideMesh CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  contract-tests:
+    name: Compile & Test Smart Contracts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo Dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            contracts/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build Smart Contracts
+        run: |
+          cd contracts
+          cargo build --target wasm32-unknown-unknown --release
+
+      - name: Run Cargo Contract Tests
+        run: |
+          cd contracts
+          cargo test
+
+  frontend-build:
+    name: Lint, Test & Build Next.js App
+    runs-on: ubuntu-latest
+    needs: contract-tests
+    env:
+      NEXT_PUBLIC_STELLAR_NETWORK: "testnet"
+      NEXT_PUBLIC_RPC_URL: "https://soroban-testnet.stellar.org"
+      NEXT_PUBLIC_HORIZON_URL: "https://horizon-testnet.stellar.org"
+      NEXT_PUBLIC_CONTRACT_ID: "CACD35GOH4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2"
+      NEXT_PUBLIC_REPUTATION_CONTRACT_ID: "CB4XQ7Q4E4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2"
+      NEXT_PUBLIC_FARE_TOKEN_ID: "CDLZFC3SYJYDZT7K67VZ75HPJSIZMAFRHGVKNECE6ALBHGLMTZW4NNKQ"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run ESLint Linter
+        run: npm run lint
+
+      - name: Run Vitest Unit Tests
+        run: npm run test
+
+      - name: Build Next.js Production Bundle
+        run: npm run build
