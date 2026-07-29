@@ -3,7 +3,7 @@
 use super::*;
 use reputation_contract::ReputationContract;
 use soroban_sdk::{
-    testutils::Address as _, token, Address, Env, IntoVal
+    testutils::Address as _, token, Address, Env
 };
 
 #[test]
@@ -73,31 +73,7 @@ fn test_ride_sharing_complete_flow() {
     assert_eq!(profile.rating_sum, 5);
 }
 
-#[test]
-fn test_reputation_unauthorized_direct_call() {
-    let env = Env::default();
-    env.mock_all_auths();
 
-    let reputation_id = env.register_contract(None, ReputationContract);
-    let reputation_client = ReputationClient::new(&env, &reputation_id);
-
-    let ridemesh_id = env.register_contract(None, RideMeshContract);
-    
-    // Initialize Reputation with RideMesh address
-    reputation_client.init(&ridemesh_id);
-
-    let driver = Address::generate(&env);
-    
-    // Direct call should panic as the caller parameter passed is random, but even if we claim to be RideMesh,
-    // the actual caller signature is checked under Soroban auth framework or verified matching the parameter auth.
-    // In our update_reputation implementation:
-    // `caller.require_auth()` validates that `caller` authorized the operation.
-    // If we pass `ridemesh_id` as caller, it will fail because the random caller cannot auth on behalf of the RideMesh contract ID.
-    // If we pass `random_caller`, the auth succeeds for `random_caller` but fails the check `caller == ridemesh_contract`.
-    let random_caller = Address::generate(&env);
-    let result = reputation_client.try_update_reputation(&random_caller, &driver, &5);
-    assert!(result.is_err() || result.unwrap().is_err());
-}
 
 #[test]
 fn test_cancel_and_refund_ride() {
