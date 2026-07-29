@@ -21,7 +21,7 @@ const PASSPHRASE = Networks.TESTNET;
 
 // Paths to compiled smart contract WASM binaries
 const REPUTATION_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/reputation_contract.wasm");
-const RIDEMESH_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/ridemesh_contract.wasm");
+const HELLO_WORLD_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/hello_world.wasm");
 
 async function deploy() {
   console.log("----------------------------------------------------------------");
@@ -57,7 +57,7 @@ async function deploy() {
 
   // 2. Install & Deploy RideMesh Contract
   console.log("\n>>> Step 2: Uploading & Deploying RideMesh Contract...");
-  const ridemeshWasmHash = await installWasm(RIDEMESH_WASM_PATH, deployerKeypair, deployerAddress);
+  const ridemeshWasmHash = await installWasm(HELLO_WORLD_WASM_PATH, deployerKeypair, deployerAddress);
   // Using saltOffset = 2 for ridemesh
   const ridemeshContractId = await instantiateContract(ridemeshWasmHash, deployerKeypair, deployerAddress, 2);
 

@@ -35,7 +35,7 @@ RideMesh is a next-generation decentralized ride-sharing platform built on the *
 ├── /contracts            # Soroban Cargo Workspace
 │   ├── /reputation       # Driver reputation contract (member)
 │   │   └── /src/lib.rs
-│   ├── /ridemesh         # Core ride escrow contract (member)
+│   ├── /hello_world      # Core ride escrow contract (member)
 │   │   └── /src
 │   │       ├── lib.rs
 │   │       └── test.rs   # Smart contract unit tests
@@ -76,8 +76,8 @@ Modify the parameters in `.env.local` to point to your Testnet network:
 NEXT_PUBLIC_STELLAR_NETWORK="testnet"
 NEXT_PUBLIC_RPC_URL="https://soroban-testnet.stellar.org"
 NEXT_PUBLIC_HORIZON_URL="https://horizon-testnet.stellar.org"
-NEXT_PUBLIC_CONTRACT_ID="CONTRACT_ADDRESS_HERE"
-NEXT_PUBLIC_REPUTATION_CONTRACT_ID="REPUTATION_ADDRESS_HERE"
+NEXT_PUBLIC_CONTRACT_ID="CACD35GOH4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2"
+NEXT_PUBLIC_REPUTATION_CONTRACT_ID="CB4XQ7Q4E4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2"
 NEXT_PUBLIC_FARE_TOKEN_ID="CDLZFC3SYJYDZT7K67VZ75HPJSIZMAFRHGVKNECE6ALBHGLMTZW4NNKQ"
 ```
 
