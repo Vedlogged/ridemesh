@@ -9,6 +9,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 soroban-sdk = "20.0.0"
 
+[features]
+testutils = ["soroban-sdk/testutils"]
+
 [profile.release]
 opt-level = "z"
 overflow-checks = true

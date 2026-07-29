@@ -10,7 +10,10 @@ crate-type = ["cdylib", "rlib"]
 soroban-sdk = "20.0.0"
 
 [dev-dependencies]
-reputation_contract = { path = "../reputation" }
+reputation_contract = { path = "../reputation", features = ["testutils"] }
+
+[features]
+testutils = ["soroban-sdk/testutils"]
 
 [profile.release]
 opt-level = "z"
