@@ -8,7 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = "20.0.0"
-arbitrary = "1.4.1"
+arbitrary = "1.4"
 
 [dev-dependencies]
 reputation_contract = { path = "../reputation", features = ["testutils"] }

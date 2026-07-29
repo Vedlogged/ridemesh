@@ -7,4 +7,3 @@ members = [
 
 [patch.crates-io]
 ethnum = { path = "ethnum-patch" }
-arbitrary = { git = "https://github.com/rust-fuzz/arbitrary", tag = "v1.4.1" }
