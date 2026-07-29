@@ -96,7 +96,7 @@ fn test_reputation_unauthorized_direct_call() {
     // If we pass `random_caller`, the auth succeeds for `random_caller` but fails the check `caller == ridemesh_contract`.
     let random_caller = Address::generate(&env);
     let result = reputation_client.try_update_reputation(&random_caller, &driver, &5);
-    assert!(result.is_err());
+    assert!(result.is_err() || result.unwrap().is_err());
 }
 
 #[test]

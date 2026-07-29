@@ -20,6 +20,5 @@ testutils = ["soroban-sdk/testutils"]
 opt-level = "z"
 overflow-checks = true
 debug = false
-panic = "abort"
 lto = true
 codegen-units = 1
