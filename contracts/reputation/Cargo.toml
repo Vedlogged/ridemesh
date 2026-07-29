@@ -8,7 +8,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 soroban-sdk = "20.0.0"
-ethnum = "1.5.3"
 
 [profile.release]
 opt-level = "z"

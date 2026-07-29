@@ -17,6 +17,7 @@ jobs:
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.76.0
           targets: wasm32-unknown-unknown
 
       - name: Cache Cargo Dependencies
@@ -35,7 +36,6 @@ jobs:
       - name: Build Smart Contracts
         run: |
           cd contracts
-          cargo update
           cargo build --target wasm32-unknown-unknown --release
 
       - name: Run Cargo Contract Tests
