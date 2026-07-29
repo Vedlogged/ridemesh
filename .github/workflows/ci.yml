@@ -40,7 +40,7 @@ jobs:
       - name: Run Cargo Contract Tests
         run: |
           cd contracts
-          cargo test
+          RUST_BACKTRACE=1 cargo test -- --nocapture
 
   frontend-build:
     name: Lint, Test & Build Next.js App
