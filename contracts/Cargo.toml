@@ -4,3 +4,6 @@ members = [
     "hello_world",
     "reputation",
 ]
+
+[patch.crates-io]
+ethnum = { path = "ethnum-patch" }
