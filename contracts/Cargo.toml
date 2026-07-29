@@ -7,3 +7,4 @@ members = [
 
 [patch.crates-io]
 ethnum = { path = "ethnum-patch" }
+arbitrary = { path = "arbitrary-patch" }
