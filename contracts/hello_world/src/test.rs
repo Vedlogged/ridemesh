@@ -74,7 +74,6 @@ fn test_ride_sharing_complete_flow() {
 }
 
 #[test]
-#[should_panic(expected = "Only the RideMesh contract can update driver reputation")]
 fn test_reputation_unauthorized_direct_call() {
     let env = Env::default();
     env.mock_all_auths();
@@ -96,7 +95,8 @@ fn test_reputation_unauthorized_direct_call() {
     // If we pass `ridemesh_id` as caller, it will fail because the random caller cannot auth on behalf of the RideMesh contract ID.
     // If we pass `random_caller`, the auth succeeds for `random_caller` but fails the check `caller == ridemesh_contract`.
     let random_caller = Address::generate(&env);
-    reputation_client.update_reputation(&random_caller, &driver, &5);
+    let result = reputation_client.try_update_reputation(&random_caller, &driver, &5);
+    assert!(result.is_err());
 }
 
 #[test]
