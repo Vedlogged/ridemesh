@@ -35,6 +35,7 @@ jobs:
       - name: Build Smart Contracts
         run: |
           cd contracts
+          cargo update -p ethnum || true
           cargo build --target wasm32-unknown-unknown --release
 
       - name: Run Cargo Contract Tests

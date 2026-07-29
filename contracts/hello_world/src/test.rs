@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::*;
+use reputation_contract::ReputationContract;
 use soroban_sdk::{
     testutils::Address as _, token, Address, Env, IntoVal
 };

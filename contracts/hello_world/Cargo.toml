@@ -9,6 +9,9 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 soroban-sdk = "20.0.0"
 
+[dev-dependencies]
+reputation_contract = { path = "../reputation" }
+
 [profile.release]
 opt-level = "z"
 overflow-checks = true
