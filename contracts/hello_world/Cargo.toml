@@ -8,6 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = "20.0.0"
+ethnum = "1.5.3"
 
 [dev-dependencies]
 reputation_contract = { path = "../reputation" }
