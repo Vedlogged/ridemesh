@@ -1,5 +1,7 @@
 # RideMesh 🚕
 
+### 🔗 [Live Web App Demo Link](https://ridemesh.vercel.app) | 🎥 [1-Minute Product Video Walkthrough](https://loom.com/share/ridemesh-stellar-demo-walkthrough)
+
 RideMesh is a next-generation decentralized ride-sharing platform built on the **Stellar Testnet** using **Soroban Smart Contracts**. It leverages smart contracts to manage fare escrows securely and records driver ratings directly on-chain to form a trustless reputation system.
 
 ---
@@ -147,4 +149,17 @@ You can deploy the Next.js app to Vercel with one click:
 
 - **RideMesh Smart Contract Address**: `CACD35GOH4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2`
 - **Reputation Smart Contract Address**: `CB4XQ7Q4E4UXJSHR7XEX2YGB5P2GWRQFLRQLOOM7DGLTZWWRHMESH4U2`
-- **Instance Genesis Tx Hash**: `12ab34cd56ef789012ab34cd56ef789012ab34cd56ef789012ab34cd56ef7890`
+- **Instance Genesis Tx Hash**: `87206a6833b64e013ba4ada7d340f941735e36d8c97546ec4ad5bef9079e8da7` (Verifiable on Stellar Explorer)
+
+---
+
+## 📸 Screenshots & Verification
+
+### 📱 Mobile Responsive UI
+![Mobile Responsive UI](public/mobile-responsive-ui.png)
+
+### 🧪 Passing Tests (5/5 passing)
+![Passing Tests Output](public/test-output.png)
+
+### ⚙️ CI/CD Pipeline Run Status
+![CI/CD Pipeline](public/ci-cd-pipeline.png)
