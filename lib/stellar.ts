@@ -49,7 +49,6 @@ export async function getXLMBalance(publicKey: string): Promise<string> {
  */
 export async function getTokenBalance(publicKey: string, tokenContractId: string): Promise<string> {
   try {
-    const contract = new Contract(tokenContractId);
     const address = Address.fromString(publicKey);
     
     // Call token.balance_of(address)

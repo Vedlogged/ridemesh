@@ -14,7 +14,6 @@ import {
   LogOut, 
   Cpu, 
   HelpCircle, 
-  ExternalLink,
   Shield,
   Zap,
   Globe,
@@ -188,7 +187,7 @@ export default function Home() {
               </div>
               <h4 className="font-bold text-sm text-zinc-100 uppercase tracking-wide">Secure Escrows</h4>
               <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
-                Fares are deposited directly into a Soroban contract. Refunds can be claimed if a driver isn't assigned or cancels.
+                Fares are deposited directly into a Soroban contract. Refunds can be claimed if a driver isn&apos;t assigned or cancels.
               </p>
             </div>
             

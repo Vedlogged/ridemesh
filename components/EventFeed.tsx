@@ -1,19 +1,28 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useStellar } from "@/hooks/useStellar";
 import { Clock, ExternalLink, Activity, Info, CheckCircle, AlertTriangle, Star, Shield } from "lucide-react";
 
 export const EventFeed: React.FC = () => {
   const { events, pollBlockchainEvents, isSandbox } = useStellar();
+  const [now, setNow] = useState(() => Date.now());
 
-  // Poll for events every 5 seconds
+  // Poll for events and update time reference
   useEffect(() => {
     pollBlockchainEvents();
-    const interval = setInterval(() => {
+    const pollInterval = setInterval(() => {
       pollBlockchainEvents();
     }, 5000);
-    return () => clearInterval(interval);
+
+    const timeInterval = setInterval(() => {
+      setNow(Date.now());
+    }, 10000);
+
+    return () => {
+      clearInterval(pollInterval);
+      clearInterval(timeInterval);
+    };
   }, [pollBlockchainEvents]);
 
   const getEventStyles = (type: string) => {
@@ -63,7 +72,7 @@ export const EventFeed: React.FC = () => {
   };
 
   const formatTime = (ts: number) => {
-    const diffMs = Date.now() - ts;
+    const diffMs = now - ts;
     const diffMins = Math.floor(diffMs / 60000);
     
     if (diffMins < 1) return "Just now";

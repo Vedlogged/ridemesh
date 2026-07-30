@@ -10,9 +10,7 @@ export const RequestRideForm: React.FC = () => {
     requestRide, 
     txStatus, 
     isConnected, 
-    connectWallet, 
-    walletAddress,
-    isSandbox
+    connectWallet
   } = useStellar();
 
   const [fare, setFare] = useState<string>("12.5");
@@ -35,8 +33,9 @@ export const RequestRideForm: React.FC = () => {
 
     try {
       await requestRide(numericFare);
-    } catch (e: any) {
-      setErrorMsg(e.message || "Failed to create ride escrow");
+    } catch (e) {
+      const error = e as Error;
+      setErrorMsg(error.message || "Failed to create ride escrow");
     }
   };
 

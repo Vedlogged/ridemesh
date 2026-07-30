@@ -5,7 +5,7 @@ import { useStellar } from "@/hooks/useStellar";
 import { ShieldCheck, ShieldAlert, Loader2, ExternalLink, History, Cpu } from "lucide-react";
 
 export const TransactionHistory: React.FC = () => {
-  const { txStatus, txHash, errorMessage, isSandbox } = useStellar();
+  const { txStatus, txHash, errorMessage } = useStellar();
 
   const getStatusDisplay = () => {
     switch (txStatus) {

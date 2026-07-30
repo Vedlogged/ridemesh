@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useStellar } from "@/hooks/useStellar";
-import { Star, ShieldAlert, Award, UserCheck, Flame } from "lucide-react";
+import { Star, Award, UserCheck, Flame } from "lucide-react";
 
 export const DriverRanking: React.FC = () => {
   const { drivers } = useStellar();

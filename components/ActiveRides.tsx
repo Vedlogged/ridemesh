@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
-import { useStellar, Ride } from "@/hooks/useStellar";
-import { Star, Shield, Car, Check, X, Navigation, Award, Loader2, AlertCircle } from "lucide-react";
+import { useStellar } from "@/hooks/useStellar";
+import { Star, Car, Check, X, Navigation, Award, Loader2, AlertCircle } from "lucide-react";
 
 export const ActiveRides: React.FC = () => {
   const { 

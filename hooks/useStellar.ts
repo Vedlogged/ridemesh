@@ -6,14 +6,13 @@ import {
   buildTransaction, 
   pollTransaction, 
   CONTRACT_ID, 
-  REPUTATION_CONTRACT_ID,
   FARE_TOKEN_ID, 
   NETWORK_PASSPHRASE,
   toStroops,
   fromStroops,
   simulateCall
 } from "@/lib/stellar";
-import { nativeToScVal, scValToNative, xdr, Address, TransactionBuilder } from "@stellar/stellar-sdk";
+import { nativeToScVal, scValToNative, Address, TransactionBuilder } from "@stellar/stellar-sdk";
 
 // Define TypeScript interfaces for our application state
 export interface Ride {
@@ -282,11 +281,12 @@ export const useStellar = create<StellarState>((set, get) => ({
       // Trigger initial contract syncing
       await get().pollBlockchainEvents();
 
-    } catch (error: any) {
-      console.error("Failed to connect wallet:", error);
+    } catch (error) {
+      const err = error as Error;
+      console.error("Failed to connect wallet:", err);
       set({ 
         isConnecting: false, 
-        errorMessage: error.message || "User dismissed wallet modal or connection failed" 
+        errorMessage: err.message || "User dismissed wallet modal or connection failed" 
       });
     }
   },
@@ -333,7 +333,7 @@ export const useStellar = create<StellarState>((set, get) => ({
       const xlm = await getXLMBalance(walletAddress);
       const token = await getTokenBalance(walletAddress, FARE_TOKEN_ID);
       set({ xlmBalance: xlm, tokenBalance: token });
-    } catch (e: any) {
+    } catch (e) {
       console.error("Failed to load balances:", e);
     }
   },
@@ -434,11 +434,12 @@ export const useStellar = create<StellarState>((set, get) => ({
       await get().loadBalances();
       await get().pollBlockchainEvents();
 
-    } catch (error: any) {
-      console.error("Smart contract execution failed:", error);
+    } catch (error) {
+      const err = error as Error;
+      console.error("Smart contract execution failed:", err);
       set({ 
         txStatus: "failed", 
-        errorMessage: error.message || "Smart contract transaction rejected or failed" 
+        errorMessage: err.message || "Smart contract transaction rejected or failed" 
       });
     } finally {
       get().setLoading("request", false);
@@ -510,11 +511,12 @@ export const useStellar = create<StellarState>((set, get) => ({
       
       set({ txStatus: "success" });
       await get().pollBlockchainEvents();
-    } catch (error: any) {
-      console.error("Accept ride failed:", error);
+    } catch (error) {
+      const err = error as Error;
+      console.error("Accept ride failed:", err);
       set({ 
         txStatus: "failed", 
-        errorMessage: error.message || "Accept ride transaction failed" 
+        errorMessage: err.message || "Accept ride transaction failed" 
       });
     } finally {
       get().setLoading(loaderKey, false);
@@ -592,11 +594,12 @@ export const useStellar = create<StellarState>((set, get) => ({
       set({ txStatus: "success" });
       await get().loadBalances();
       await get().pollBlockchainEvents();
-    } catch (error: any) {
-      console.error("Complete ride failed:", error);
+    } catch (error) {
+      const err = error as Error;
+      console.error("Complete ride failed:", err);
       set({ 
         txStatus: "failed", 
-        errorMessage: error.message || "Complete ride transaction failed" 
+        errorMessage: err.message || "Complete ride transaction failed" 
       });
     } finally {
       get().setLoading(loaderKey, false);
@@ -679,11 +682,12 @@ export const useStellar = create<StellarState>((set, get) => ({
       set({ txStatus: "success" });
       await get().loadBalances();
       await get().pollBlockchainEvents();
-    } catch (error: any) {
-      console.error("Cancel ride failed:", error);
+    } catch (error) {
+      const err = error as Error;
+      console.error("Cancel ride failed:", err);
       set({ 
         txStatus: "failed", 
-        errorMessage: error.message || "Cancellation failed" 
+        errorMessage: err.message || "Cancellation failed" 
       });
     } finally {
       get().setLoading(loaderKey, false);
@@ -779,11 +783,12 @@ export const useStellar = create<StellarState>((set, get) => ({
       
       set({ txStatus: "success" });
       await get().pollBlockchainEvents();
-    } catch (error: any) {
-      console.error("Rate driver failed:", error);
+    } catch (error) {
+      const err = error as Error;
+      console.error("Rate driver failed:", err);
       set({ 
         txStatus: "failed", 
-        errorMessage: error.message || "Submit rating transaction failed" 
+        errorMessage: err.message || "Submit rating transaction failed" 
       });
     } finally {
       get().setLoading(loaderKey, false);
@@ -862,7 +867,7 @@ export const useStellar = create<StellarState>((set, get) => ({
         const updatedRidesMap = new Map<number, Partial<Ride>>();
         const newRideIdsToFetch: number[] = [];
 
-        const formattedEvents = eventResponse.events.map((evt: any) => {
+        const formattedEvents = eventResponse.events.map((evt) => {
           const topics = evt.topic;
           const eventSymbol = scValToNative(topics[0]) as string;
           const address = scValToNative(topics[1]) as string;
