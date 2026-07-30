@@ -127,6 +127,9 @@ Open [http://localhost:3000](http://localhost:3000) inside your web browser.
 4. Fund your address using the Stellar Friendbot tool:
    - Click "Fund Account" inside the Freighter wallet or navigate to `https://friendbot.stellar.org/?addr=<your_public_key>`.
 
+### Wallet Connection Options:
+![Wallet Connection Modal](public/wallet-options.png)
+
 ---
 
 ## ⚡ Deployment to Vercel
