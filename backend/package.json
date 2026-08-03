@@ -1,0 +1,30 @@
+{
+  "name": "ridemesh-backend",
+  "version": "1.0.0",
+  "description": "Event indexer and analytics backend for RideMesh X",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^16.1.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "mongoose": "^8.3.1",
+    "ws": "^8.16.0",
+    "@sentry/node": "^7.111.0",
+    "posthog-node": "^3.6.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.12.7",
+    "@types/ws": "^8.5.10",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.4.5"
+  }
+}
