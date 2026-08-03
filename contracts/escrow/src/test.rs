@@ -92,6 +92,7 @@ fn test_unregistered_driver_cannot_accept() {
 
     let reputation_id = env.register_contract(None, ReputationContract);
     let identity_id = env.register_contract(None, DriverIdentityContract);
+    let identity_client = DriverIdentityClient::new(&env, &identity_id);
     let escrow_id = env.register_contract(None, RideMeshEscrowContract);
     let escrow_client = RideMeshEscrowContractClient::new(&env, &escrow_id);
 
