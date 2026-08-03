@@ -1,8 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "hello_world",
+    "escrow",
     "reputation",
+    "driver_identity",
 ]
 
 [patch.crates-io]
