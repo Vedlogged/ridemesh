@@ -21,12 +21,13 @@ const server = new rpc.Server(RPC_URL);
 const PASSPHRASE = Networks.TESTNET;
 
 // Paths to compiled smart contract WASM binaries
+const DRIVER_IDENTITY_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/driver_identity_contract.wasm");
 const REPUTATION_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/reputation_contract.wasm");
-const HELLO_WORLD_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/hello_world.wasm");
+const ESCROW_WASM_PATH = path.join(__dirname, "../contracts/target/wasm32v1-none/release/escrow_contract.wasm");
 
 async function deploy() {
   console.log("----------------------------------------------------------------");
-  console.log(" RideMesh Advanced Smart Contracts Deployment (Stellar Testnet)");
+  console.log(" RideMesh X Smart Contracts Deployment (Stellar Testnet)");
   console.log("----------------------------------------------------------------");
 
   const deployerSecret = process.env.DEPLOYER_SECRET_KEY;
@@ -50,34 +51,44 @@ async function deploy() {
     process.exit(1);
   }
 
-  // 1. Install & Deploy Reputation Contract
-  console.log("\n>>> Step 1: Uploading & Deploying Reputation Contract...");
+  // 1. Install & Deploy Driver Identity Contract
+  console.log("\n>>> Step 1: Uploading & Deploying Driver Identity Contract...");
+  const driverIdentityWasmHash = await installWasm(DRIVER_IDENTITY_WASM_PATH, deployerKeypair, deployerAddress);
+  const driverIdentityContractId = await instantiateContract(driverIdentityWasmHash, deployerKeypair, deployerAddress, 1);
+  console.log(`✓ Driver Identity Contract Deployed at: ${driverIdentityContractId}`);
+
+  // 2. Install & Deploy Reputation Contract
+  console.log("\n>>> Step 2: Uploading & Deploying Reputation Contract...");
   const reputationWasmHash = await installWasm(REPUTATION_WASM_PATH, deployerKeypair, deployerAddress);
-  // Using saltOffset = 1 for reputation
-  const reputationContractId = await instantiateContract(reputationWasmHash, deployerKeypair, deployerAddress, 1);
+  const reputationContractId = await instantiateContract(reputationWasmHash, deployerKeypair, deployerAddress, 2);
+  console.log(`✓ Reputation Contract Deployed at: ${reputationContractId}`);
 
-  // 2. Install & Deploy RideMesh Contract
-  console.log("\n>>> Step 2: Uploading & Deploying RideMesh Contract...");
-  const ridemeshWasmHash = await installWasm(HELLO_WORLD_WASM_PATH, deployerKeypair, deployerAddress);
-  // Using saltOffset = 2 for ridemesh
-  const ridemeshContractId = await instantiateContract(ridemeshWasmHash, deployerKeypair, deployerAddress, 2);
+  // 3. Install & Deploy Escrow Contract
+  console.log("\n>>> Step 3: Uploading & Deploying Escrow Contract...");
+  const escrowWasmHash = await installWasm(ESCROW_WASM_PATH, deployerKeypair, deployerAddress);
+  const escrowContractId = await instantiateContract(escrowWasmHash, deployerKeypair, deployerAddress, 3);
+  console.log(`✓ Escrow Contract Deployed at: ${escrowContractId}`);
 
-  // 3. Cross-linking contracts on-chain
-  console.log("\n>>> Step 3: Cross-Linking Reputation & RideMesh Contracts...");
+  // 4. Cross-linking contracts on-chain
+  console.log("\n>>> Step 4: Cross-Linking & Initializing Contracts...");
   
-  // Call init(ridemeshContractId) on reputation contract
-  await callContractInit(reputationContractId, ridemeshContractId, deployerKeypair, deployerAddress);
+  // Call init(deployerAddress) on driver identity contract
+  await callContractInitSingle(driverIdentityContractId, deployerAddress, deployerKeypair, deployerAddress);
 
-  // Call init(reputationContractId) on ridemesh contract
-  await callContractInit(ridemeshContractId, reputationContractId, deployerKeypair, deployerAddress);
+  // Call init(escrowContractId) on reputation contract
+  await callContractInitSingle(reputationContractId, escrowContractId, deployerKeypair, deployerAddress);
 
-  // 4. Save deployed IDs to env config
-  updateEnvFile(ridemeshContractId, reputationContractId);
+  // Call init(reputationContractId, driverIdentityContractId) on escrow contract
+  await callEscrowContractInit(escrowContractId, reputationContractId, driverIdentityContractId, deployerKeypair, deployerAddress);
+
+  // 5. Save deployed IDs to env config
+  updateEnvFile(escrowContractId, reputationContractId, driverIdentityContractId);
 
   console.log("\n----------------------------------------------------------------");
   console.log("✓ All deployments and cross-linking initialization complete!");
-  console.log(`- RideMesh Contract ID: ${ridemeshContractId}`);
+  console.log(`- Escrow Contract ID: ${escrowContractId}`);
   console.log(`- Reputation Contract ID: ${reputationContractId}`);
+  console.log(`- Driver Identity Contract ID: ${driverIdentityContractId}`);
   console.log("----------------------------------------------------------------");
 }
 
@@ -134,7 +145,7 @@ async function instantiateContract(wasmHashHex, deployerKeypair, deployerAddress
   console.log(`Instantiating contract with salt offset ${saltOffset}...`);
   let account = await server.getAccount(deployerAddress);
 
-  // Determinisitc 32-byte salt using the offset
+  // Deterministic 32-byte salt
   const salt = Buffer.alloc(32);
   salt.writeUInt32BE(saltOffset, 28);
 
@@ -186,8 +197,8 @@ async function instantiateContract(wasmHashHex, deployerKeypair, deployerAddress
   return Address.fromScVal(contractAddressVal).toString();
 }
 
-async function callContractInit(contractId, initAddressArg, deployerKeypair, deployerAddress) {
-  console.log(`Calling init() on contract ${contractId} with address ${initAddressArg}...`);
+async function callContractInitSingle(contractId, addressArg, deployerKeypair, deployerAddress) {
+  console.log(`Calling init() on contract ${contractId} with address ${addressArg}...`);
   let account = await server.getAccount(deployerAddress);
   const contract = new Contract(contractId);
 
@@ -196,10 +207,7 @@ async function callContractInit(contractId, initAddressArg, deployerKeypair, dep
     networkPassphrase: PASSPHRASE,
   })
     .addOperation(
-      contract.call(
-        "init", 
-        nativeToScVal(Address.fromString(initAddressArg))
-      )
+      contract.call("init", nativeToScVal(Address.fromString(addressArg)))
     )
     .setTimeout(60)
     .build();
@@ -217,9 +225,46 @@ async function callContractInit(contractId, initAddressArg, deployerKeypair, dep
     throw new Error(`Submission failed: ${JSON.stringify(sendResp.errorResult)}`);
   }
 
-  console.log(`Submitted init call. Hash: ${sendResp.hash}. Waiting for confirmation...`);
+  console.log(`Submitted init call. Hash: ${sendResp.hash}. Waiting...`);
   await pollTx(sendResp.hash);
-  console.log(`✓ Successfully initialized contract ${contractId}`);
+  console.log(`✓ Initialized contract ${contractId}`);
+}
+
+async function callEscrowContractInit(escrowId, reputationId, identityId, deployerKeypair, deployerAddress) {
+  console.log(`Calling init(${reputationId}, ${identityId}) on Escrow Contract ${escrowId}...`);
+  let account = await server.getAccount(deployerAddress);
+  const contract = new Contract(escrowId);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        "init", 
+        nativeToScVal(Address.fromString(reputationId)),
+        nativeToScVal(Address.fromString(identityId))
+      )
+    )
+    .setTimeout(60)
+    .build();
+
+  let sim = await server.simulateTransaction(tx);
+  if (sim.error) {
+    throw new Error(`Call to escrow init() simulation failed: ${JSON.stringify(sim.error)}`);
+  }
+
+  tx = rpc.assembleTransaction(tx, sim).build();
+  tx.sign(deployerKeypair);
+
+  let sendResp = await server.sendTransaction(tx);
+  if (sendResp.status === "ERROR") {
+    throw new Error(`Submission failed: ${JSON.stringify(sendResp.errorResult)}`);
+  }
+
+  console.log(`Submitted escrow init call. Hash: ${sendResp.hash}. Waiting...`);
+  await pollTx(sendResp.hash);
+  console.log(`✓ Initialized Escrow Contract ${escrowId}`);
 }
 
 async function pollTx(hash) {
@@ -236,19 +281,21 @@ async function pollTx(hash) {
   throw new Error("Polling timed out");
 }
 
-function updateEnvFile(ridemeshContractId, reputationContractId) {
+function updateEnvFile(escrowId, reputationId, identityId) {
   const envLocalPath = path.join(__dirname, "../.env.local");
   
   const content = `NEXT_PUBLIC_STELLAR_NETWORK="testnet"
 NEXT_PUBLIC_RPC_URL="https://soroban-testnet.stellar.org"
 NEXT_PUBLIC_HORIZON_URL="https://horizon-testnet.stellar.org"
-NEXT_PUBLIC_CONTRACT_ID="${ridemeshContractId}"
-NEXT_PUBLIC_REPUTATION_CONTRACT_ID="${reputationContractId}"
+NEXT_PUBLIC_CONTRACT_ID="${escrowId}"
+NEXT_PUBLIC_REPUTATION_CONTRACT_ID="${reputationId}"
+NEXT_PUBLIC_DRIVER_IDENTITY_CONTRACT_ID="${identityId}"
 NEXT_PUBLIC_FARE_TOKEN_ID="CDLZFC3SYJYDZT7K67VZ75HPJSIZMAFRHGVKNECE6ALBHGLMTZW4NNKQ"
+NEXT_PUBLIC_BACKEND_URL="http://localhost:5001"
 `;
 
   fs.writeFileSync(envLocalPath, content);
-  console.log(`✓ Saved deployed contract config to .env.local`);
+  console.log(`✓ Saved deployed contract configs to .env.local`);
 }
 
 deploy().catch(err => {
