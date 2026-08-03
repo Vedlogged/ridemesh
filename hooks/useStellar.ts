@@ -148,7 +148,7 @@ interface StellarState {
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5001";
 let isKitInitialized = false;
 
-async function getWalletKit() {
+async function getWalletKit(): Promise<any> {
   if (typeof window === "undefined") {
     throw new Error("StellarWalletsKit can only be loaded in the browser context.");
   }
