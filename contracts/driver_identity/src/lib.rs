@@ -1,5 +1,14 @@
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
+use soroban_sdk::{contract, contractimpl, contracttype, contracterror, Address, Env, String};
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    AlreadyInitialized = 1,
+    DriverAlreadyRegistered = 2,
+    NotAuthorized = 3,
+}
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -29,7 +38,7 @@ impl DriverIdentityContract {
     // Initialize the contract with the administrator address
     pub fn init(env: Env, admin: Address) {
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Already initialized");
+            env.panic_with_error(Error::AlreadyInitialized);
         }
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
@@ -48,7 +57,7 @@ impl DriverIdentityContract {
 
         let profile_key = DataKey::Driver(driver.clone());
         if env.storage().persistent().has(&profile_key) {
-            panic!("Driver already registered");
+            env.panic_with_error(Error::DriverAlreadyRegistered);
         }
 
         let timestamp = env.ledger().timestamp();
@@ -77,7 +86,7 @@ impl DriverIdentityContract {
             .expect("Admin not set");
 
         if admin != contract_admin {
-            panic!("Only the administrator can verify drivers");
+            env.panic_with_error(Error::NotAuthorized);
         }
 
         let profile_key = DataKey::Driver(driver.clone());

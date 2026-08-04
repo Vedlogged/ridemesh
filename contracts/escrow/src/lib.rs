@@ -1,7 +1,24 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, contractclient, String
+    contract, contractimpl, contracttype, symbol_short, contracterror, Address, Env, contractclient, String
 };
+
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    AlreadyInitialized = 1,
+    RideNotRequested = 2,
+    DriverNotRegistered = 3,
+    DriverNotVerified = 4,
+    RideNotAccepted = 5,
+    Unauthorized = 6,
+    CannotCancel = 7,
+    RideNotCompleted = 8,
+    AlreadyRated = 9,
+    InvalidRating = 10,
+    RideNotFound = 11,
+}
 
 use soroban_sdk::token::Client as TokenClient;
 
@@ -73,7 +90,7 @@ impl RideMeshEscrowContract {
     // Initialize the contract with the reputation contract and driver identity contract addresses
     pub fn init(env: Env, reputation_contract: Address, driver_identity_contract: Address) {
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Already initialized");
+            env.panic_with_error(Error::AlreadyInitialized);
         }
         env.storage().instance().set(&DataKey::ReputationContract, &reputation_contract);
         env.storage().instance().set(&DataKey::DriverIdentityContract, &driver_identity_contract);
@@ -128,11 +145,13 @@ impl RideMeshEscrowContract {
         driver.require_auth();
 
         // 1. Fetch the Ride
-        let mut ride: Ride = env.storage().persistent().get(&DataKey::Ride(ride_id))
-            .expect("Ride not found");
+        let mut ride: Ride = match env.storage().persistent().get(&DataKey::Ride(ride_id)) {
+            Some(r) => r,
+            None => env.panic_with_error(Error::RideNotFound),
+        };
 
         if ride.status != 0 {
-            panic!("Ride is not in Requested state");
+            env.panic_with_error(Error::RideNotRequested);
         }
 
         // 2. Perform Driver Identity Check (Cross-contract verification)
@@ -140,11 +159,13 @@ impl RideMeshEscrowContract {
             .expect("Driver Identity contract address not set");
         let identity_client = DriverIdentityClient::new(&env, &driver_identity_contract);
         
-        let driver_profile = identity_client.get_driver(&driver)
-            .expect("Driver profile not registered on-chain");
+        let driver_profile = match identity_client.get_driver(&driver) {
+            Some(p) => p,
+            None => env.panic_with_error(Error::DriverNotRegistered),
+        };
 
         if !driver_profile.is_verified {
-            panic!("Driver is registered but not verified by administrator");
+            env.panic_with_error(Error::DriverNotVerified);
         }
 
         // 3. Update the Ride state
@@ -162,13 +183,15 @@ impl RideMeshEscrowContract {
 
     // Complete the ride and trigger the payment release
     pub fn complete_ride(env: Env, ride_id: u32, token: Address) {
-        let mut ride: Ride = env.storage().persistent().get(&DataKey::Ride(ride_id))
-            .expect("Ride not found");
+        let mut ride: Ride = match env.storage().persistent().get(&DataKey::Ride(ride_id)) {
+            Some(r) => r,
+            None => env.panic_with_error(Error::RideNotFound),
+        };
 
         ride.passenger.require_auth();
 
         if ride.status != 1 {
-            panic!("Ride is not in Accepted state");
+            env.panic_with_error(Error::RideNotAccepted);
         }
 
         ride.status = 2; // Completed
@@ -190,16 +213,18 @@ impl RideMeshEscrowContract {
     pub fn cancel_ride(env: Env, ride_id: u32, token: Address, requester: Address) {
         requester.require_auth();
 
-        let mut ride: Ride = env.storage().persistent().get(&DataKey::Ride(ride_id))
-            .expect("Ride not found");
+        let mut ride: Ride = match env.storage().persistent().get(&DataKey::Ride(ride_id)) {
+            Some(r) => r,
+            None => env.panic_with_error(Error::RideNotFound),
+        };
 
         if requester != ride.passenger && requester != ride.driver {
-            panic!("Unauthorized to cancel this ride");
+            env.panic_with_error(Error::Unauthorized);
         }
 
         // Only allow cancel if Requested (0) or Accepted (1)
         if ride.status > 1 {
-            panic!("Ride cannot be cancelled at this stage");
+            env.panic_with_error(Error::CannotCancel);
         }
 
         ride.status = 3; // Cancelled
@@ -219,8 +244,10 @@ impl RideMeshEscrowContract {
 
     // Explicit refund passenger helper (matches the refundPassenger requirement)
     pub fn refund_passenger(env: Env, ride_id: u32, token: Address) {
-        let ride: Ride = env.storage().persistent().get(&DataKey::Ride(ride_id))
-            .expect("Ride not found");
+        let ride: Ride = match env.storage().persistent().get(&DataKey::Ride(ride_id)) {
+            Some(r) => r,
+            None => env.panic_with_error(Error::RideNotFound),
+        };
         
         ride.passenger.require_auth();
         Self::cancel_ride(env, ride_id, token, ride.passenger.clone());
@@ -228,8 +255,10 @@ impl RideMeshEscrowContract {
 
     // Explicit release payment helper (matches the releasePayment requirement)
     pub fn release_payment(env: Env, ride_id: u32, token: Address) {
-        let ride: Ride = env.storage().persistent().get(&DataKey::Ride(ride_id))
-            .expect("Ride not found");
+        let ride: Ride = match env.storage().persistent().get(&DataKey::Ride(ride_id)) {
+            Some(r) => r,
+            None => env.panic_with_error(Error::RideNotFound),
+        };
         
         ride.passenger.require_auth();
         Self::complete_ride(env, ride_id, token);
@@ -237,21 +266,23 @@ impl RideMeshEscrowContract {
 
     // Passenger rates the driver and updates their reputation score
     pub fn rate_driver(env: Env, ride_id: u32, rating: u32) {
-        let mut ride: Ride = env.storage().persistent().get(&DataKey::Ride(ride_id))
-            .expect("Ride not found");
+        let mut ride: Ride = match env.storage().persistent().get(&DataKey::Ride(ride_id)) {
+            Some(r) => r,
+            None => env.panic_with_error(Error::RideNotFound),
+        };
 
         ride.passenger.require_auth();
 
         if ride.status != 2 {
-            panic!("Ride is not completed yet");
+            env.panic_with_error(Error::RideNotCompleted);
         }
 
         if ride.rating != 0 {
-            panic!("Driver already rated for this ride");
+            env.panic_with_error(Error::AlreadyRated);
         }
 
         if rating < 1 || rating > 5 {
-            panic!("Rating must be between 1 and 5");
+            env.panic_with_error(Error::InvalidRating);
         }
 
         ride.rating = rating;
