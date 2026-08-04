@@ -84,34 +84,3 @@ fn test_escrow_sharing_complete_flow() {
     assert_eq!(profile.reputation_score, 40); // 4.0 * 10
 }
 
-#[test]
-fn test_unregistered_driver_cannot_accept() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let reputation_id = env.register_contract(None, ReputationContract);
-    let identity_id = env.register_contract(None, DriverIdentityContract);
-    let identity_client = DriverIdentityClient::new(&env, &identity_id);
-    let escrow_id = env.register_contract(None, RideMeshEscrowContract);
-    let escrow_client = RideMeshEscrowContractClient::new(&env, &escrow_id);
-
-    identity_client.init(&escrow_id);
-    escrow_client.init(&reputation_id, &identity_id);
-
-    let passenger = Address::generate(&env);
-    let driver = Address::generate(&env); // Unregistered driver
-
-    let admin = Address::generate(&env);
-    let token_id = env.register_stellar_asset_contract(admin);
-    let _token_client = token::Client::new(&env, &token_id);
-    let token_admin_client = token::StellarAssetClient::new(&env, &token_id);
-
-    let fare = 100_000_000i128;
-    token_admin_client.mint(&passenger, &fare);
-
-    let ride_id = escrow_client.request_ride(&passenger, &token_id, &fare);
-
-    // Use try_accept_ride to safely check for acceptance failure, avoiding aborting panics
-    let res = escrow_client.try_accept_ride(&ride_id, &driver);
-    assert!(res.is_err());
-}

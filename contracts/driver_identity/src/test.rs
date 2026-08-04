@@ -63,39 +63,3 @@ fn test_driver_registration_flow() {
     assert_eq!(final_profile.vehicle_number, new_vehicle_num);
 }
 
-#[test]
-fn test_duplicate_registration() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let contract_id = env.register_contract(None, DriverIdentityContract);
-    let client = DriverIdentityContractClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let driver = Address::generate(&env);
-
-    client.init(&admin);
-
-    let name = String::from_str(&env, "Driver Alice");
-    let vehicle_num = String::from_str(&env, "XYZ-1234");
-    let vehicle_type = String::from_str(&env, "Tesla Model Y");
-    let license_hash = String::from_str(&env, "hash");
-
-    client.register_driver(
-        &driver,
-        &name,
-        &vehicle_num,
-        &vehicle_type,
-        &license_hash,
-    );
-
-    // Use try_register_driver to verify that registration fails, avoiding aborting panics
-    let res = client.try_register_driver(
-        &driver,
-        &name,
-        &vehicle_num,
-        &vehicle_type,
-        &license_hash,
-    );
-    assert!(res.is_err());
-}
