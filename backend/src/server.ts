@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import express, { Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import cors from "cors";

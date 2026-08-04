@@ -294,7 +294,7 @@ export const AnalyticsDashboard: React.FC = () => {
             {driversList.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-4">
                 <ShieldAlert className="w-7 h-7 text-zinc-700 mb-1.5" />
-                <p className="text-xs text-zinc-400 font-semibold">No driver registry records sync'd</p>
+                <p className="text-xs text-zinc-400 font-semibold">No driver registry records sync&apos;d</p>
                 <p className="text-[9px] text-zinc-500 max-w-xs mt-0.5">
                   Driver profile index is loaded dynamically from the backend listener.
                 </p>

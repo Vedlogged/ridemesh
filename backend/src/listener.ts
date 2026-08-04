@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { rpc, Address, scValToNative } from "@stellar/stellar-sdk";
 import { Database, IRide, IDriver } from "./models/models";
 import { NotificationService } from "./services/notifications";
