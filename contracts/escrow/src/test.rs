@@ -85,7 +85,6 @@ fn test_escrow_sharing_complete_flow() {
 }
 
 #[test]
-#[should_panic(expected = "Driver profile not registered on-chain")]
 fn test_unregistered_driver_cannot_accept() {
     let env = Env::default();
     env.mock_all_auths();
@@ -104,7 +103,7 @@ fn test_unregistered_driver_cannot_accept() {
 
     let admin = Address::generate(&env);
     let token_id = env.register_stellar_asset_contract(admin);
-    let token_client = token::Client::new(&env, &token_id);
+    let _token_client = token::Client::new(&env, &token_id);
     let token_admin_client = token::StellarAssetClient::new(&env, &token_id);
 
     let fare = 100_000_000i128;
@@ -112,6 +111,7 @@ fn test_unregistered_driver_cannot_accept() {
 
     let ride_id = escrow_client.request_ride(&passenger, &token_id, &fare);
 
-    // Should panic since driver is not registered
-    escrow_client.accept_ride(&ride_id, &driver);
+    // Use try_accept_ride to safely check for acceptance failure, avoiding aborting panics
+    let res = escrow_client.try_accept_ride(&ride_id, &driver);
+    assert!(res.is_err());
 }

@@ -64,7 +64,6 @@ fn test_driver_registration_flow() {
 }
 
 #[test]
-#[should_panic(expected = "Driver already registered")]
 fn test_duplicate_registration() {
     let env = Env::default();
     env.mock_all_auths();
@@ -90,12 +89,13 @@ fn test_duplicate_registration() {
         &license_hash,
     );
 
-    // Should panic due to duplicate registration
-    client.register_driver(
+    // Use try_register_driver to verify that registration fails, avoiding aborting panics
+    let res = client.try_register_driver(
         &driver,
         &name,
         &vehicle_num,
         &vehicle_type,
         &license_hash,
     );
+    assert!(res.is_err());
 }
